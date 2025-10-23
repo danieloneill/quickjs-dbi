@@ -40,11 +40,8 @@ static DBIResult *jsdbi_alloc_result(JSContext *ctx, DBIHandle *handle, dbi_resu
 	return r;
 }
 
-static void dbi_finalizer(JSRuntime *rt, JSValue val) {
-	DBIHandle *h = JS_GetOpaque(val, dbi_class_id);
-	if(!h)
-		return;
-
+static void jsdbi_close_connection(DBIHandle *h)
+{
 	DBIResult *rhnext = NULL;
 	for( DBIResult *rh = h->results; rh; rh=rhnext )
 	{
@@ -55,11 +52,21 @@ static void dbi_finalizer(JSRuntime *rt, JSValue val) {
 		rh->conn = NULL;
 		rh->res = NULL;
 	}
-	
 	h->results = NULL;
 
 	if (h->conn)
 		dbi_conn_close(h->conn);
+
+	h->conn = NULL;
+}
+
+static void dbi_finalizer(JSRuntime *rt, JSValue val) {
+	DBIHandle *h = JS_GetOpaque(val, dbi_class_id);
+	if(!h)
+		return;
+
+	jsdbi_close_connection(h);
+
 	js_free_rt(rt, h);
 }
 
@@ -489,10 +496,7 @@ static JSValue jsdbi_close(JSContext *ctx, JSValueConst this_val,
 			 int argc, JSValueConst *argv) {
 	DBIHandle *h = JS_GetOpaque2(ctx, this_val, dbi_class_id);
 	if (!h) return JS_EXCEPTION;
-	if (h->conn) {
-		dbi_conn_close(h->conn);
-		h->conn = NULL;
-	}
+	jsdbi_close_connection(h);
 	return JS_UNDEFINED;
 }
 
